@@ -20,8 +20,10 @@ const (
 )
 
 // CleanAndSplit cleans the provided path p, splits it into its constituent
-// parts, and URL-decodes each segment. This is different from path.Split which
-// just splits a path into prefix and suffix.
+// parts, and URL-decodes each segment. Paths from r.URL.Path may contain
+// percent-encoded directory names, so each segment is unescaped before use.
+// It differs from path.Split which only splits a path into prefix and suffix
+// components.
 //
 // If p is empty or contains only path separators, CleanAndSplit returns a slice
 // of length 1 whose only element is "".
