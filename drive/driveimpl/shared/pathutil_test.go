@@ -25,9 +25,6 @@ func TestCleanAndSplit(t *testing.T) {
 		{"a/b/", []string{"a", "b"}},
 		{"/a/b/", []string{"a", "b"}},
 		{"/a/../b", []string{"b"}},
-
-			{"/space%20dir/file.txt", []string{"space dir", "file.txt"}},
-			{"/a%2Fb/c", []string{"a/b", "c"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
