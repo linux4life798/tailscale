@@ -19,17 +19,20 @@ const (
 	sep             = '/'
 )
 
-// CleanAndSplit cleans the provided path p and splits it into its constituent
-// parts. This is different from path.Split which just splits a path into prefix
-// and suffix.
-//
-// The provided path must already be URL-decoded. CleanAndSplit does not
-// perform any url.PathUnescape calls.
+// CleanAndSplit cleans the provided path p, splits it into its constituent
+// parts, and URL-decodes each segment. This is different from path.Split which
+// just splits a path into prefix and suffix.
 //
 // If p is empty or contains only path separators, CleanAndSplit returns a slice
 // of length 1 whose only element is "".
 func CleanAndSplit(p string) []string {
-        return strings.Split(strings.Trim(path.Clean(p), sepStringAndDot), sepString)
+	parts := strings.Split(strings.Trim(path.Clean(p), sepStringAndDot), sepString)
+	for i, part := range parts {
+		if u, err := url.PathUnescape(part); err == nil {
+			parts[i] = u
+		}
+	}
+	return parts
 }
 
 // Normalize normalizes the given path (e.g. dropping trailing slashes).
