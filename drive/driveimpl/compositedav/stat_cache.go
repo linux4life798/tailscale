@@ -6,6 +6,7 @@ package compositedav
 import (
 	"bytes"
 	"encoding/xml"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -67,6 +68,7 @@ type StatCache struct {
 // status and value. If the function returned http.StatusMultiStatus, getOr
 // caches the resulting value at the given name and depth before returning.
 func (c *StatCache) getOr(name string, depth int, or func() (int, []byte)) (int, []byte) {
+	log.Printf("StatCache.getOr(name=%q, depth=%d, func)\n", name, depth)
 	ce := c.get(name, depth)
 	if ce == nil {
 		// Not cached, fetch value.
@@ -77,6 +79,7 @@ func (c *StatCache) getOr(name string, depth int, or func() (int, []byte)) (int,
 			c.set(name, depth, ce)
 		}
 	}
+	log.Printf("StatCache.getOr -> %+v\n", ce)
 	return ce.Status, ce.Raw
 }
 
@@ -85,10 +88,16 @@ func (c *StatCache) getOr(name string, depth int, or func() (int, []byte)) (int,
 // is present in the cache at depth 1. If so, it will infer that the child does
 // not exist and return notFound (404).
 func (c *StatCache) get(name string, depth int) *cacheEntry {
+	log.Printf("StatCache.get(name=%q, depth=%d)\n", name, depth)
+	done := func(out *cacheEntry) *cacheEntry {
+		log.Printf("StatCache.get -> %+v\n", out)
+		return out
+	}
 	if c == nil {
-		return nil
+		return done(nil)
 	}
 
+	// Craig: Maybe convert to url-encoded here
 	name = shared.Normalize(name)
 
 	c.mu.Lock()
@@ -97,39 +106,44 @@ func (c *StatCache) get(name string, depth int) *cacheEntry {
 	ce := c.tryGetLocked(name, depth)
 	if ce != nil {
 		// Cache hit.
-		return ce
+		return done(ce)
 	}
 
 	if depth > 0 {
 		// Cache miss.
-		return nil
+		return done(nil)
 	}
 
 	// At depth 0, if child's parent is in the cache, and the child isn't
 	// cached, we can infer that the child is notFound.
 	p := c.tryGetLocked(shared.Parent(name), 1)
 	if p != nil {
-		return notFound
+		return done(notFound)
 	}
 
 	// No parent in cache, cache miss.
-	return nil
+	return done(nil)
 }
 
 // tryGetLocked requires that c.mu be held.
 func (c *StatCache) tryGetLocked(name string, depth int) *cacheEntry {
+	log.Printf("StatCache.tryGetLocked(name=%q, depth=%d)\n", name, depth)
+	done := func(out *cacheEntry) *cacheEntry {
+		log.Printf("StatCache.tryGetLocked -> %+v\n", out)
+		return out
+	}
 	if c.cachesByDepthAndPath == nil {
-		return nil
+		return done(nil)
 	}
 	cache := c.cachesByDepthAndPath[depth]
 	if cache == nil {
-		return nil
+		return done(nil)
 	}
 	item := cache.Get(name)
 	if item == nil {
-		return nil
+		return done(nil)
 	}
-	return item.Value()
+	return done(item.Value())
 }
 
 // set stores the given cacheEntry in the cache at the given name and depth. If
@@ -138,6 +152,7 @@ func (c *StatCache) tryGetLocked(name string, depth int) *cacheEntry {
 // store depth 0 entries for all children. If parsing the result fails, nothing
 // is cached.
 func (c *StatCache) set(name string, depth int, ce *cacheEntry) {
+	log.Printf("StatCache.set(name=%q, depth=%d, ce=%+v)\n", name, depth, ce)
 	if c == nil {
 		return
 	}
@@ -196,6 +211,7 @@ func (c *StatCache) set(name string, depth int, ce *cacheEntry) {
 
 // setLocked requires that c.mu be held.
 func (c *StatCache) setLocked(name string, depth int, ce *cacheEntry) {
+	log.Printf("StatCache.setLocked(name=%q, depth=%d, ce=%q)\n", name, depth, ce)
 	if c.cachesByDepthAndPath == nil {
 		c.cachesByDepthAndPath = make(map[int]*ttlcache.Cache[string, *cacheEntry])
 	}
@@ -212,6 +228,7 @@ func (c *StatCache) setLocked(name string, depth int, ce *cacheEntry) {
 
 // invalidate invalidates the entire cache.
 func (c *StatCache) invalidate() {
+	log.Printf("StatCache.invalidate()\n")
 	if c == nil {
 		return
 	}
@@ -225,6 +242,7 @@ func (c *StatCache) invalidate() {
 }
 
 func (c *StatCache) stop() {
+	log.Printf("StatCache.stop()\n")
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -240,6 +258,14 @@ type cacheEntry struct {
 
 func newCacheEntry(status int, raw []byte) *cacheEntry {
 	return &cacheEntry{Status: status, Raw: raw}
+}
+
+// String implements fmt.Stringer to provide minimal printing of cacheEntry
+func (ce *cacheEntry) String() string {
+	if ce == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("Status: %d, Raw: %s", ce.Status, string(ce.Raw))
 }
 
 type propStat struct {
